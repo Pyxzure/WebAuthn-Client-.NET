@@ -1,12 +1,14 @@
 ﻿using System.Formats.Cbor;
+using System.Security.Cryptography;
 
 namespace WebAuthn_Client_.NET.Cryptographic
 {
     // CBOR Utilities for proper WebAuthn compliance
     public static class CborHelper
     {
-        public static byte[] EncodeAttestationObject(byte[] authenticatorData, string format = "none")
+        public static byte[] EncodeAttestationObject(byte[] authenticatorData)
         {
+            string format = "none";
             var writer = new CborWriter();
 
             // Write attestation object as a map with 3 entries
@@ -34,66 +36,67 @@ namespace WebAuthn_Client_.NET.Cryptographic
         {
             var writer = new CborWriter();
 
-            // COSE Key is a CBOR map
-            writer.WriteStartMap(null); // Unknown number of entries initially
-
-            // Key type (kty)
-            writer.WriteInt32(1); // kty label
-            switch (algorithm)
-            {
-                case CoseAlgorithm.ES256:
-                    writer.WriteInt32(2); // EC2 key type
-                    break;
-                case CoseAlgorithm.RS256:
-                    writer.WriteInt32(3); // RSA key type
-                    break;
-                default:
-                    throw new NotSupportedException($"Algorithm {algorithm} not supported for COSE key encoding");
-            }
-
-            // Algorithm identifier (alg)
-            writer.WriteInt32(3); // alg label
-            writer.WriteInt32((int)algorithm);
-
             if (algorithm == CoseAlgorithm.ES256)
             {
-                // For EC2 keys, we need to extract x and y coordinates
-                var keyBytes = Convert.FromBase64String(publicKey);
+                writer.WriteStartMap(5); // 5 entries: kty, alg, crv, x, y
 
-                // Curve identifier (crv)
-                writer.WriteInt32(-1); // crv label
-                writer.WriteInt32(1);  // P-256 curve
+                // Key type (kty)
+                writer.WriteInt32(1);
+                writer.WriteInt32(2); // EC2 key type
 
-                // Extract coordinates from the public key
-                // This is a simplified extraction - real implementation would parse the DER structure
-                var coordinateSize = 32; // P-256 coordinate size
-                if (keyBytes.Length >= coordinateSize * 2)
+                // Algorithm (alg)
+                writer.WriteInt32(3);
+                writer.WriteInt32((int)algorithm);
+
+                using (var ecdsa = ECDsa.Create())
                 {
+                    ecdsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKey), out _);
+                    var parameters = ecdsa.ExportParameters(false);
+
+                    // Curve (crv)
+                    writer.WriteInt32(-1);
+                    writer.WriteInt32(1); // P-256
+
                     // x coordinate
-                    writer.WriteInt32(-2); // x label
-                    writer.WriteByteString(keyBytes.Skip(keyBytes.Length - coordinateSize * 2).Take(coordinateSize).ToArray());
+                    writer.WriteInt32(-2);
+                    writer.WriteByteString(parameters.Q.X!);
 
                     // y coordinate
-                    writer.WriteInt32(-3); // y label
-                    writer.WriteByteString(keyBytes.Skip(keyBytes.Length - coordinateSize).Take(coordinateSize).ToArray());
+                    writer.WriteInt32(-3);
+                    writer.WriteByteString(parameters.Q.Y!);
                 }
+
+                writer.WriteEndMap();
             }
             else if (algorithm == CoseAlgorithm.RS256)
             {
-                // For RSA keys, we need n and e parameters
-                // This is a simplified implementation
-                var keyBytes = Convert.FromBase64String(publicKey);
+                writer.WriteStartMap(4); // 4 entries: kty, alg, n, e
 
-                // n (modulus) - simplified extraction
-                writer.WriteInt32(-1); // n label
-                writer.WriteByteString(keyBytes.Take(256).ToArray()); // Simplified
+                // Key type (kty)
+                writer.WriteInt32(1);
+                writer.WriteInt32(3); // RSA key type
 
-                // e (exponent) - typically 65537
-                writer.WriteInt32(-2); // e label
-                writer.WriteByteString(new byte[] { 0x01, 0x00, 0x01 }); // Common exponent 65537
+                // Algorithm (alg)
+                writer.WriteInt32(3);
+                writer.WriteInt32((int)algorithm);
+
+                using (var rsa = RSA.Create())
+                {
+                    rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKey), out _);
+                    var parameters = rsa.ExportParameters(false);
+
+                    // n (modulus)
+                    writer.WriteInt32(-1);
+                    writer.WriteByteString(parameters.Modulus!);
+
+                    // e (exponent)
+                    writer.WriteInt32(-2);
+                    writer.WriteByteString(parameters.Exponent!);
+                }
+
+                writer.WriteEndMap();
             }
 
-            writer.WriteEndMap();
             return writer.Encode();
         }
 

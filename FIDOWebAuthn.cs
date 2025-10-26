@@ -8,10 +8,12 @@ namespace WebAuthn_Client_.NET
 {
     public class FIDOWebAuthn
     {
+        public byte[] AAGUID = Convert.FromHexString("b53976664885aa6bcebfe52262a439a2");   //Chromium Browser
+        public int CredLen = 64;
+
         private readonly ICredentialStorage _storage;
         private readonly Dictionary<CoseAlgorithm, ICryptographicProvider> _cryptoProviders;
         private readonly Random _random;
-        public static readonly byte[] _aaguid = new byte[16]; // Mock AAGUID (all zeros)
 
         public FIDOWebAuthn(ICredentialStorage? storage = null)
         {
@@ -27,12 +29,12 @@ namespace WebAuthn_Client_.NET
         }
 
         // Create credential (registration)
-        public PublicKeyCredential Create(string jsonInput)
+        public PublicKeyCredential Create(string jsonInput, string? Origin = null)
         {
             try
             {
                 var options = JsonSerializer.Deserialize<PublicKeyCredentialCreationOptions>(jsonInput)!;
-                return CreateCredential(options);
+                return CreateCredential(options, Origin);
             }
             catch (JsonException ex)
             {
@@ -40,18 +42,18 @@ namespace WebAuthn_Client_.NET
             }
         }
 
-        public PublicKeyCredential Create(PublicKeyCredentialCreationOptions options)
+        public PublicKeyCredential Create(PublicKeyCredentialCreationOptions options, string? Origin = null)
         {
-            return CreateCredential(options);
+            return CreateCredential(options, Origin);
         }
 
         // Get credential (authentication)
-        public PublicKeyCredential Get(string jsonInput)
+        public PublicKeyCredential Get(string jsonInput, string? Origin = null)
         {
             try
             {
                 var options = JsonSerializer.Deserialize<PublicKeyCredentialRequestOptions>(jsonInput)!;
-                return GetCredential(options);
+                return GetCredential(options, Origin);
             }
             catch (JsonException ex)
             {
@@ -59,12 +61,12 @@ namespace WebAuthn_Client_.NET
             }
         }
 
-        public PublicKeyCredential Get(PublicKeyCredentialRequestOptions options)
+        public PublicKeyCredential Get(PublicKeyCredentialRequestOptions options, string? Origin = null)
         {
-            return GetCredential(options);
+            return GetCredential(options, Origin);
         }
 
-        private PublicKeyCredential CreateCredential(PublicKeyCredentialCreationOptions options)
+        private PublicKeyCredential CreateCredential(PublicKeyCredentialCreationOptions options, string? Origin = null)
         {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
@@ -106,11 +108,12 @@ namespace WebAuthn_Client_.NET
             _storage.SaveCredential(credentialRecord);
 
             // Create client data
+            Origin ??= $"https://{options.Rp.Id}";
             var clientData = new ClientData
             {
                 Type = "webauthn.create",
                 Challenge = options.Challenge,
-                Origin = $"https://{options.Rp.Id}",
+                Origin = Origin,
                 CrossOrigin = false
             };
 
@@ -124,13 +127,15 @@ namespace WebAuthn_Client_.NET
             var authenticatorData = CreateAuthenticatorData(options.Rp.Id, true, credentialIdBytes, cosePublicKey);
 
             // Create attestation object using proper CBOR encoding
-            var attestationObject = CborHelper.EncodeAttestationObject(authenticatorData, options.Attestation ?? "none");
+            if ((options.Attestation ?? "none") != "none")
+                throw new NotSupportedException("Only 'none' attestation is supported in this mock implementation.");
+            var attestationObject = CborHelper.EncodeAttestationObject(authenticatorData);
 
             // Create response
             var response = new AuthenticatorAttestationResponse
             {
                 ClientDataJSON = Base64UrlHelper.Encode(clientDataBytes),
-                AttestationObject = Base64UrlHelper.Encode(attestationObject)
+                AttestationObject = Base64UrlHelper.Encode(attestationObject),
             };
 
             return new PublicKeyCredential
@@ -142,7 +147,7 @@ namespace WebAuthn_Client_.NET
             };
         }
 
-        private PublicKeyCredential GetCredential(PublicKeyCredentialRequestOptions options)
+        private PublicKeyCredential GetCredential(PublicKeyCredentialRequestOptions options, string? Origin = null)
         {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
@@ -181,11 +186,12 @@ namespace WebAuthn_Client_.NET
                 throw new UnauthorizedAccessException("RP ID mismatch");
 
             // Create client data
+            Origin ??= $"https://{credential.RpId}";
             var clientData = new ClientData
             {
                 Type = "webauthn.get",
                 Challenge = options.Challenge,
-                Origin = $"https://{credential.RpId}",
+                Origin = Origin,
                 CrossOrigin = false
             };
 
@@ -214,7 +220,7 @@ namespace WebAuthn_Client_.NET
                 ClientDataJSON = Base64UrlHelper.Encode(clientDataBytes),
                 AuthenticatorData = Base64UrlHelper.Encode(authenticatorData),
                 Signature = Base64UrlHelper.Encode(signature),
-                UserHandle = Base64UrlHelper.EncodeString(credential.UserId)
+                UserHandle = credential.UserId
             };
 
             var credentialIdBytes = Convert.FromBase64String(credential.CredentialId);
@@ -246,7 +252,7 @@ namespace WebAuthn_Client_.NET
 
         private string GenerateCredentialId()
         {
-            var bytes = new byte[64];
+            var bytes = new byte[CredLen];
             _random.NextBytes(bytes);
             return Convert.ToBase64String(bytes);
         }
@@ -264,7 +270,9 @@ namespace WebAuthn_Client_.NET
 
                 // Flags (1 byte)
                 byte flags = 0x01; // User present (UP)
-                flags |= 0x04; // User present (UP)
+                flags |= 0x04; // User verified (UV)
+                flags |= 0x08; // Backup Eligibility (BE)
+                flags |= 0x10; // Backup State (BS)
                 if (includeAttestedCredentialData)
                     flags |= 0x40; // Attested credential data included (AT)
                 writer.Write(flags);
@@ -279,7 +287,7 @@ namespace WebAuthn_Client_.NET
                 if (includeAttestedCredentialData && credentialIdBytes != null && cosePublicKey != null)
                 {
                     // AAGUID (16 bytes)
-                    writer.Write(_aaguid);
+                    writer.Write(AAGUID);
 
                     // Credential ID length (2 bytes, big-endian)
                     var lengthBytes = BitConverter.GetBytes((ushort)credentialIdBytes.Length);

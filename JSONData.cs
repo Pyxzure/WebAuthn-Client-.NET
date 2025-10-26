@@ -17,7 +17,7 @@ namespace WebAuthn_Client_.NET
         public required List<PublicKeyCredentialParameters> PubKeyCredParams { get; set; }
 
         [JsonPropertyName("timeout")]
-        public uint? Timeout { get; set; }
+        public double? Timeout { get; set; }
 
         [JsonPropertyName("excludeCredentials")]
         public List<PublicKeyCredentialDescriptor>? ExcludeCredentials { get; set; }

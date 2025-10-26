@@ -15,4 +15,4 @@ Default implementation stores all keys as plain text into a CSV file. An optiona
 
 ## Cryptographic provider
 
-Support for limited cryptographic schemes are available: ES256(-7), RS256(-257). More scheme support can be added by implementing additional `ICryptographicProvider`.
+Support for limited cryptographic schemes are available: ES256(-7), RS256(-257). More scheme support can be added by implementing additional `ICryptographicProvider` and `CborHelper.EncodeCoseKey` for the scheme.

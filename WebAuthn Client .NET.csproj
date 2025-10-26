@@ -5,6 +5,7 @@
     <RootNamespace>WebAuthn_Client_.NET</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <OutputType>Exe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
