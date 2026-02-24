@@ -10,8 +10,8 @@ namespace WebAuthn_Client_.NET
     {
         public byte[] AAGUID = Convert.FromHexString("b53976664885aa6bcebfe52262a439a2");   //Chromium Browser
         public int CredLen = 64;
+        public readonly ICredentialStorage _storage;
 
-        private readonly ICredentialStorage _storage;
         private readonly Dictionary<CoseAlgorithm, ICryptographicProvider> _cryptoProviders;
         private readonly Random _random;
 
@@ -223,7 +223,7 @@ namespace WebAuthn_Client_.NET
                 UserHandle = credential.UserId
             };
 
-            var credentialIdBytes = Convert.FromBase64String(credential.CredentialId);
+            var credentialIdBytes = Base64UrlHelper.Decode(credential.CredentialId);
             return new PublicKeyCredential
             {
                 Id = Base64UrlHelper.Encode(credentialIdBytes),

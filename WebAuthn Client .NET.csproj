@@ -5,8 +5,16 @@
     <RootNamespace>WebAuthn_Client_.NET</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <OutputType>Exe</OutputType>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Program.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Formats.Cbor" Version="9.0.8" />
