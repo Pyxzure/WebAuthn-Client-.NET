@@ -1,0 +1,9 @@
+{
+  "name": "webauthn_client_dotnet",
+  "description": "WebAuthn Client .NET native messaging host",
+  "path": "WebAuthn.Client.NativeHost.exe",
+  "type": "stdio",
+  "allowed_extensions": [
+    "webauthn-client-dotnet@example.local"
+  ]
+}

@@ -6,10 +6,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
+	<RuntimeIdentifier>linux-x64</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="Program.cs" />
+    <Compile Remove="WebAuthn.Client.NativeHost\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
