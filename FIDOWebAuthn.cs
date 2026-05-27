@@ -74,11 +74,14 @@ namespace WebAuthn_Client_.NET
             if (string.IsNullOrEmpty(options.Challenge))
                 throw new ArgumentException("Challenge is required");
 
-            if (options.Rp == null || string.IsNullOrEmpty(options.Rp.Id))
+            if (options.Rp == null)
                 throw new ArgumentException("Relying party information is required");
 
             if (options.User == null || string.IsNullOrEmpty(options.User.Id))
                 throw new ArgumentException("User information is required");
+
+            var rpId = GetEffectiveRpId(options.Rp.Id, Origin);
+            Origin ??= $"https://{rpId}";
 
             // Select algorithm
             var algorithm = SelectAlgorithm(options.PubKeyCredParams) ?? throw new NotSupportedException("No supported algorithm found");
@@ -97,7 +100,7 @@ namespace WebAuthn_Client_.NET
                 CredentialId = credentialId,
                 UserId = options.User.Id,
                 UserName = options.User.Name,
-                RpId = options.Rp.Id,
+                RpId = rpId,
                 Algorithm = algorithm.ToString(),
                 PublicKey = publicKey,
                 PrivateKey = privateKey,
@@ -108,7 +111,6 @@ namespace WebAuthn_Client_.NET
             _storage.SaveCredential(credentialRecord);
 
             // Create client data
-            Origin ??= $"https://{options.Rp.Id}";
             var clientData = new ClientData
             {
                 Type = "webauthn.create",
@@ -124,7 +126,7 @@ namespace WebAuthn_Client_.NET
             var cosePublicKey = CborHelper.EncodeCoseKey(publicKey, algorithm);
 
             // Create authenticator data with proper CBOR-encoded credential public key
-            var authenticatorData = CreateAuthenticatorData(options.Rp.Id, true, credentialIdBytes, cosePublicKey);
+            var authenticatorData = CreateAuthenticatorData(rpId, true, credentialIdBytes, cosePublicKey);
 
             // Create attestation object using proper CBOR encoding
             if ((options.Attestation ?? "none") != "none")
@@ -155,6 +157,8 @@ namespace WebAuthn_Client_.NET
             if (string.IsNullOrEmpty(options.Challenge))
                 throw new ArgumentException("Challenge is required");
 
+            var rpId = GetEffectiveRpId(options.RpId, Origin);
+
             // Find matching credential
             CredentialRecord? credential = null;
 
@@ -171,7 +175,7 @@ namespace WebAuthn_Client_.NET
             else
             {
                 // If no specific credentials are allowed, get the first one
-                var credentials = _storage.GetCredentialsByRp(options.RpId);
+                var credentials = _storage.GetCredentialsByRp(rpId);
                 if (credentials.Count > 0)
                 {
                     credential = credentials[0]; // Just take the first one
@@ -182,7 +186,7 @@ namespace WebAuthn_Client_.NET
                 throw new InvalidOperationException("No matching credential found");
 
             // Verify RP ID matches
-            if (!string.IsNullOrEmpty(options.RpId) && credential.RpId != options.RpId)
+            if (credential.RpId != rpId)
                 throw new UnauthorizedAccessException("RP ID mismatch");
 
             // Create client data
@@ -255,6 +259,21 @@ namespace WebAuthn_Client_.NET
             var bytes = new byte[CredLen];
             _random.NextBytes(bytes);
             return Convert.ToBase64String(bytes);
+        }
+
+        private static string GetEffectiveRpId(string? rpId, string? origin)
+        {
+            if (!string.IsNullOrWhiteSpace(rpId))
+                return rpId;
+
+            if (string.IsNullOrWhiteSpace(origin))
+                throw new ArgumentException("Relying party ID is required when origin is not provided");
+
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri) ||
+                string.IsNullOrWhiteSpace(originUri.IdnHost))
+                throw new ArgumentException("Origin must be an absolute URI when relying party ID is not provided");
+
+            return originUri.IdnHost.TrimEnd('.').ToLowerInvariant();
         }
 
         private byte[] CreateAuthenticatorData(string rpId, bool includeAttestedCredentialData,

@@ -38,7 +38,7 @@ namespace WebAuthn_Client_.NET
         public uint? Timeout { get; set; }
 
         [JsonPropertyName("rpId")]
-        public required string RpId { get; set; }
+        public string? RpId { get; set; }
 
         [JsonPropertyName("allowCredentials")]
         public List<PublicKeyCredentialDescriptor>? AllowCredentials { get; set; }
@@ -50,7 +50,7 @@ namespace WebAuthn_Client_.NET
     public class RelyingParty
     {
         [JsonPropertyName("id")]
-        public required string Id { get; set; }
+        public string? Id { get; set; }
 
         [JsonPropertyName("name")]
         public required string Name { get; set; }
