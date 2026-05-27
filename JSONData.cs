@@ -1,4 +1,6 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace WebAuthn_Client_.NET
 {
@@ -17,7 +19,8 @@ namespace WebAuthn_Client_.NET
         public required List<PublicKeyCredentialParameters> PubKeyCredParams { get; set; }
 
         [JsonPropertyName("timeout")]
-        public double? Timeout { get; set; }
+        [JsonConverter(typeof(NullableUIntStringNumberConverter))]
+        public uint? Timeout { get; set; }
 
         [JsonPropertyName("excludeCredentials")]
         public List<PublicKeyCredentialDescriptor>? ExcludeCredentials { get; set; }
@@ -35,6 +38,7 @@ namespace WebAuthn_Client_.NET
         public required string Challenge { get; set; }
 
         [JsonPropertyName("timeout")]
+        [JsonConverter(typeof(NullableUIntStringNumberConverter))]
         public uint? Timeout { get; set; }
 
         [JsonPropertyName("rpId")]
@@ -166,5 +170,37 @@ namespace WebAuthn_Client_.NET
 
         [JsonPropertyName("crossOrigin")]
         public bool CrossOrigin { get; set; } = false;
+    }
+
+    public sealed class NullableUIntStringNumberConverter : JsonConverter<uint?>
+    {
+        public override uint? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            if (reader.TokenType == JsonTokenType.Null)
+                return null;
+
+            if (reader.TokenType == JsonTokenType.Number)
+                return reader.GetUInt32();
+
+            if (reader.TokenType == JsonTokenType.String)
+            {
+                var value = reader.GetString();
+                if (string.IsNullOrWhiteSpace(value))
+                    return null;
+
+                if (uint.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var result))
+                    return result;
+            }
+
+            throw new JsonException("Expected timeout to be an unsigned integer or numeric string.");
+        }
+
+        public override void Write(Utf8JsonWriter writer, uint? value, JsonSerializerOptions options)
+        {
+            if (value.HasValue)
+                writer.WriteNumberValue(value.Value);
+            else
+                writer.WriteNullValue();
+        }
     }
 }

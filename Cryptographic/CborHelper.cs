@@ -82,7 +82,7 @@ namespace WebAuthn_Client_.NET.Cryptographic
 
                 using (var rsa = RSA.Create())
                 {
-                    rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(publicKey), out _);
+                    RS256Provider.ImportPublicKey(rsa, Convert.FromBase64String(publicKey));
                     var parameters = rsa.ExportParameters(false);
 
                     // n (modulus)

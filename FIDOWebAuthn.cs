@@ -128,9 +128,8 @@ namespace WebAuthn_Client_.NET
             // Create authenticator data with proper CBOR-encoded credential public key
             var authenticatorData = CreateAuthenticatorData(rpId, true, credentialIdBytes, cosePublicKey);
 
-            // Create attestation object using proper CBOR encoding
-            if ((options.Attestation ?? "none") != "none")
-                throw new NotSupportedException("Only 'none' attestation is supported in this mock implementation.");
+            // This mock authenticator always returns anonymized "none" attestation,
+            // regardless of the relying party's attestation conveyance preference.
             var attestationObject = CborHelper.EncodeAttestationObject(authenticatorData);
 
             // Create response
@@ -161,14 +160,15 @@ namespace WebAuthn_Client_.NET
 
             // Find matching credential
             CredentialRecord? credential = null;
+            var triedCredentialIds = new List<string>();
 
             if (options.AllowCredentials?.Count > 0)
             {
                 foreach (var allowedCred in options.AllowCredentials)
                 {
-                    var credIdBytes = Base64UrlHelper.Decode(allowedCred.Id);
-                    var credId = Convert.ToBase64String(credIdBytes);
-                    credential = _storage.GetCredential(credId);
+                    var storageLookupId = Convert.ToBase64String(Base64UrlHelper.Decode(allowedCred.Id));
+                    triedCredentialIds.Add($"{Shorten(allowedCred.Id)}=>{Shorten(storageLookupId)}");
+                    credential = _storage.GetCredential(storageLookupId);
                     if (credential != null) break;
                 }
             }
@@ -183,11 +183,11 @@ namespace WebAuthn_Client_.NET
             }
 
             if (credential == null)
-                throw new InvalidOperationException("No matching credential found");
+                throw new InvalidOperationException(BuildNoMatchingCredentialMessage(rpId, options, triedCredentialIds));
 
             // Verify RP ID matches
             if (credential.RpId != rpId)
-                throw new UnauthorizedAccessException("RP ID mismatch");
+                throw new UnauthorizedAccessException($"RP ID mismatch. Requested RP ID '{rpId}', but stored credential RP ID is '{credential.RpId}'. Credential ID: {Shorten(credential.CredentialId)}.");
 
             // Create client data
             Origin ??= $"https://{credential.RpId}";
@@ -274,6 +274,53 @@ namespace WebAuthn_Client_.NET
                 throw new ArgumentException("Origin must be an absolute URI when relying party ID is not provided");
 
             return originUri.IdnHost.TrimEnd('.').ToLowerInvariant();
+        }
+
+        private string BuildNoMatchingCredentialMessage(
+            string rpId,
+            PublicKeyCredentialRequestOptions options,
+            List<string> triedCredentialIds)
+        {
+            var credentialsForRp = _storage.GetCredentialsByRp(rpId);
+            var allCredentials = _storage.GetAllCredentials();
+            var allowCredentialsCount = options.AllowCredentials?.Count ?? 0;
+
+            var message = new StringBuilder();
+            message.Append($"No matching credential found. Effective RP ID: '{rpId}'. ");
+            message.Append($"allowCredentials count: {allowCredentialsCount}. ");
+
+            if (triedCredentialIds.Count > 0)
+            {
+                message.Append("Tried credential IDs: ");
+                message.Append(string.Join(", ", triedCredentialIds));
+                message.Append(". ");
+            }
+
+            message.Append($"Stored credentials for RP: {credentialsForRp.Count}. ");
+            if (credentialsForRp.Count > 0)
+            {
+                message.Append("Stored credential IDs for RP: ");
+                message.Append(string.Join(", ", credentialsForRp.Select(c => Shorten(c.CredentialId))));
+                message.Append(". ");
+            }
+
+            message.Append($"Stored credentials total: {allCredentials.Count}. ");
+            if (allCredentials.Count > 0)
+            {
+                message.Append("Stored RP IDs: ");
+                message.Append(string.Join(", ", allCredentials.Select(c => c.RpId).Distinct().OrderBy(r => r)));
+                message.Append(".");
+            }
+
+            return message.ToString();
+        }
+
+        private static string Shorten(string value)
+        {
+            if (string.IsNullOrEmpty(value) || value.Length <= 16)
+                return value;
+
+            return $"{value[..8]}...{value[^8..]}";
         }
 
         private byte[] CreateAuthenticatorData(string rpId, bool includeAttestedCredentialData,

@@ -226,6 +226,8 @@ internal sealed class WebAuthnBridgeHost
             return BridgeResponse.Fail(request.Id, "Missing origin.");
         }
 
+        Console.Error.WriteLine($"{DateTimeOffset.Now:O} WebAuthn {request.Operation} started origin={request.Origin} id={request.Id}");
+
         try
         {
             var publicKeyJson = request.PublicKey.GetRawText();
@@ -236,10 +238,12 @@ internal sealed class WebAuthnBridgeHost
                 _ => throw new NotSupportedException($"Unsupported operation '{request.Operation}'.")
             };
 
+            Console.Error.WriteLine($"{DateTimeOffset.Now:O} WebAuthn {request.Operation} succeeded origin={request.Origin} id={request.Id} credentialId={credential.Id}");
             return BridgeResponse.Success(request.Id, credential);
         }
         catch (Exception ex)
         {
+            Console.Error.WriteLine($"{DateTimeOffset.Now:O} WebAuthn {request.Operation} failed origin={request.Origin} id={request.Id} error={ex.Message}");
             return BridgeResponse.Fail(request.Id, ex.Message);
         }
     }

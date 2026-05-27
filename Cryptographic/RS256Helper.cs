@@ -29,7 +29,7 @@ namespace WebAuthn_Client_.NET.Cryptographic
         {
             using (var rsa = RSA.Create())
             {
-                rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKey), out _);
+                ImportPublicKey(rsa, Convert.FromBase64String(publicKey));
                 return rsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             }
         }
@@ -38,11 +38,23 @@ namespace WebAuthn_Client_.NET.Cryptographic
         {
             using (var rsa = RSA.Create())
             {
-                rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKey), out _);
+                ImportPublicKey(rsa, Convert.FromBase64String(publicKey));
                 var parameters = rsa.ExportParameters(false);
 
                 // Return the modulus for RSA public key
                 return parameters.Modulus!;
+            }
+        }
+
+        public static void ImportPublicKey(RSA rsa, byte[] publicKeyBytes)
+        {
+            try
+            {
+                rsa.ImportSubjectPublicKeyInfo(publicKeyBytes, out _);
+            }
+            catch (CryptographicException)
+            {
+                rsa.ImportRSAPublicKey(publicKeyBytes, out _);
             }
         }
     }
